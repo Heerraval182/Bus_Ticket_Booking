@@ -1,0 +1,16 @@
+{
+  "name": "bus-seat-booking-cancellation-engine",
+  "version": "1.0.0",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "groq-sdk": "^0.10.0",
+    "node-cron": "^3.0.3",
+    "uuid": "^10.0.0"
+  }
+}
