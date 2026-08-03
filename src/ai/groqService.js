@@ -1,8 +1,20 @@
 const Groq = require('groq-sdk');
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+let groq;
+
+function getGroqClient() {
+  if (!process.env.GROQ_API_KEY) {
+    return null;
+  }
+
+  if (!groq) {
+    groq = new Groq({
+      apiKey: process.env.GROQ_API_KEY,
+    });
+  }
+
+  return groq;
+}
 
 function parseModelOutput(content) {
   if (!content) {
@@ -42,7 +54,17 @@ function parseModelOutput(content) {
 }
 
 async function analyzeFeedback(feedbackText) {
-  const response = await groq.chat.completions.create({
+  const groqClient = getGroqClient();
+
+  if (!groqClient) {
+    return {
+      sentiment: 'neutral',
+      tags: [],
+      urgent: false,
+    };
+  }
+
+  const response = await groqClient.chat.completions.create({
     model: 'llama-3.1-8b-instant',
     messages: [
       {

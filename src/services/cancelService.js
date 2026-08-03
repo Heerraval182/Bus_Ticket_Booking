@@ -9,6 +9,8 @@ const cancellationsPath = path.join(__dirname, '../data/cancellations.json');
 const seatsPath = path.join(__dirname, '../data/seats.json');
 const tripsPath = path.join(__dirname, '../data/trips.json');
 const passengersPath = path.join(__dirname, '../data/passengers.json');
+const waitlistService = require('./waitlistService');
+const holdsPath = path.join(__dirname, '../data/holds.json');
 
 function isNoRefundWindow(cancellation, trip) {
   if (!cancellation.cancelledAt || !trip || !trip.departureTime) {
@@ -55,6 +57,7 @@ function cancelBooking(bookingId, reason) {
   const cancellations = readJSON(cancellationsPath);
   const seats = readJSON(seatsPath);
   const trips = readJSON(tripsPath);
+  const holds = readJSON(holdsPath);
 
   const existingCancellation = cancellations.find((item) => item.bookingId === bookingId);
 
@@ -104,8 +107,31 @@ function cancelBooking(bookingId, reason) {
     item.id === booking.seatId && item.tripId === booking.tripId ? { ...item, status: 'available' } : item
   );
 
+  let updatedHolds = holds.filter((item) => item.seatId !== booking.seatId || item.tripId !== booking.tripId);
+
+  const promotedWaitlistEntry = waitlistService.getFirstWaitlistEntry(booking.tripId);
+
+  if (promotedWaitlistEntry) {
+    const promotedHold = {
+      id: uuidv4(),
+      passengerId: promotedWaitlistEntry.passengerId,
+      tripId: booking.tripId,
+      seatId: booking.seatId,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    };
+
+    updatedSeats[updatedSeats.findIndex((item) => item.id === booking.seatId && item.tripId === booking.tripId)] = {
+      ...updatedSeats.find((item) => item.id === booking.seatId && item.tripId === booking.tripId),
+      status: 'HELD',
+    };
+
+    updatedHolds = [...updatedHolds, promotedHold];
+    waitlistService.removeWaitlistEntry(promotedWaitlistEntry.id);
+  }
+
   writeJSON(bookingsPath, updatedBookings);
   writeJSON(seatsPath, updatedSeats);
+  writeJSON(holdsPath, updatedHolds);
   writeJSON(cancellationsPath, [...cancellations, cancellation]);
   updatePassengerRiskFlag(booking.passengerId);
 
