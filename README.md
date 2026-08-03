@@ -2,6 +2,18 @@
 
 Minimal Node.js and Express.js backend for bus seat booking, holds, cancellations, feedback, and Groq-based feedback analysis using JSON files as the database.
 
+See [DECISIONS.md](DECISIONS.md) for the hold, refund, AI, waitlist, and risk-policy choices used in the system.
+
+## What Your System Should Do
+
+When a passenger interacts with a trip, the system should:
+
+- Show which seats are available, on hold, or already booked.
+- Let a passenger place a short hold on selected seats while they complete payment.
+- Confirm a booking once payment is done, converting a valid hold into a booking.
+- Cancel a booking and work out the correct refund based on how close to departure the request comes in.
+- Read a passenger's post-trip feedback, understand its sentiment, and flag the ones that need urgent follow-up.
+
 ## Installation
 
 1. Install dependencies:
