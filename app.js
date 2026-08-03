@@ -5,6 +5,8 @@ const bookingRoutes = require('./src/routes/bookingRoutes');
 const cancelRoutes = require('./src/routes/cancelRoutes');
 const feedbackRoutes = require('./src/routes/feedbackRoutes');
 const waitlistRoutes = require('./src/routes/waitlistRoutes');
+const trips = require('./src/data/trips.json');
+const tripsJson = JSON.stringify(trips);
 
 const app = express();
 
@@ -450,6 +452,55 @@ app.get('/', (req, res) => {
 			margin-top: 22px;
 		}
 
+		.trip-grid {
+			display: grid;
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+			gap: 14px;
+			margin-top: 14px;
+		}
+
+		.trip-card {
+			padding: 18px;
+			border-radius: 20px;
+			background: rgba(255,255,255,0.04);
+			border: 1px solid rgba(255,255,255,0.08);
+			text-align: left;
+			color: var(--text);
+			transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+		}
+
+		.trip-card:hover {
+			transform: translateY(-2px);
+		}
+
+		.trip-card.active {
+			border-color: rgba(115,226,167,0.34);
+			background: rgba(115,226,167,0.08);
+		}
+
+		.trip-card h3 {
+			margin: 0 0 8px;
+			font-size: 1rem;
+		}
+
+		.trip-card p {
+			margin: 0 0 10px;
+			font-size: 0.92rem;
+			line-height: 1.65;
+			color: var(--muted);
+		}
+
+		.trip-card .trip-meta {
+			display: grid;
+			gap: 6px;
+			font-size: 0.88rem;
+			color: #deebff;
+		}
+
+		.trip-card .trip-meta span {
+			color: var(--muted);
+		}
+
 		.info-card {
 			padding: 18px;
 			border-radius: 22px;
@@ -508,6 +559,7 @@ app.get('/', (req, res) => {
 
 		@media (max-width: 980px) {
 			.hero,
+			.trip-grid,
 			.info-grid,
 			.meta-grid {
 				grid-template-columns: 1fr;
@@ -570,6 +622,21 @@ app.get('/', (req, res) => {
 					cancelling trips, joining the waitlist, and sending feedback that is analyzed by AI.
 				</p>
 
+				<div class="meta-grid" aria-label="Core passenger flow">
+					<div class="mini-card">
+						<strong>Seats</strong>
+						<span>Show which seats are available, on hold, or already booked.</span>
+					</div>
+					<div class="mini-card">
+						<strong>Hold & Book</strong>
+						<span>Place a short hold, then convert a valid hold into a booking after payment.</span>
+					</div>
+					<div class="mini-card">
+						<strong>Cancel & Feedback</strong>
+						<span>Cancel with the correct refund and flag urgent post-trip feedback.</span>
+					</div>
+				</div>
+
 				<div class="actions">
 					<a class="btn primary" href="#dashboard">Open Dashboard</a>
 					<a class="btn secondary" href="#endpoints">See APIs</a>
@@ -590,6 +657,14 @@ app.get('/', (req, res) => {
 					</div>
 				</div>
 			</article>
+
+			<section class="panel" style="padding: 26px;" id="trips">
+				<p class="section-title">Trip options</p>
+				<h3 style="margin: 0 0 10px; font-size: 1.25rem;">Choose where and when to travel</h3>
+				<p class="subtle">Passengers can compare route, departure time, and duration before booking. Clicking a trip auto-fills all booking forms.</p>
+				<div id="tripGrid" class="trip-grid"></div>
+				<div id="tripSummary" class="output">Select a trip to view booking options.</div>
+			</section>
 
 			<div class="dashboard-grid" id="dashboard">
 				<aside class="panel rail">
@@ -704,16 +779,6 @@ app.get('/', (req, res) => {
 					</form>
 				</aside>
 			</div>
-				<div>
-					<p class="section-title">API Endpoints</p>
-					<div class="endpoint"><code>GET /trips/:tripId/seats</code><span class="badge">Seats</span></div>
-				</div>
-				<div class="endpoint"><code>POST /seats/hold</code><span class="badge">Hold</span></div>
-				<div class="endpoint"><code>POST /bookings</code><span class="badge">Booking</span></div>
-				<div class="endpoint"><code>POST /bookings/:id/cancel</code><span class="badge">Cancel</span></div>
-				<div class="endpoint"><code>POST /bookings/:id/feedback</code><span class="badge">Feedback</span></div>
-				<div class="endpoint"><code>POST /waitlist</code><span class="badge">Waitlist</span></div>
-			</aside>
 		</section>
 
 		<section class="info-grid" id="overview">
@@ -742,11 +807,14 @@ app.get('/', (req, res) => {
 		<div class="footer">Bus Ticket Booking API • Professional UI landing page</div>
 	</main>
 	<script>
+		const trips = ${tripsJson};
 		const sampleTripId = '22222222-2222-2222-2222-222222222222';
 		const samplePassengerId = '11111111-1111-1111-1111-111111111111';
 		const sampleSeatId = '33333333-3333-3333-3333-333333333333';
 		const sampleBookingId = '55555555-5555-5555-5555-555555555555';
 
+		const tripGrid = document.getElementById('tripGrid');
+		const tripSummary = document.getElementById('tripSummary');
 		const seatForm = document.getElementById('seatForm');
 		const holdForm = document.getElementById('holdForm');
 		const bookingForm = document.getElementById('bookingForm');
@@ -754,9 +822,63 @@ app.get('/', (req, res) => {
 		const feedbackForm = document.getElementById('feedbackForm');
 		const waitlistForm = document.getElementById('waitlistForm');
 		const seatMap = document.getElementById('seatMap');
+		let selectedTripId = trips[0] ? trips[0].id : sampleTripId;
 
 		const setText = (id, value) => { document.getElementById(id).textContent = value; };
 		const pretty = (value) => JSON.stringify(value, null, 2);
+		const formatDateTime = (value) => new Intl.DateTimeFormat('en-GB', {
+			dateStyle: 'medium',
+			timeStyle: 'short',
+		}).format(new Date(value));
+		const formatDuration = (minutes) => {
+			const hours = Math.floor(minutes / 60);
+			const remainder = minutes % 60;
+			return [hours ? hours + 'h' : '', remainder ? remainder + 'm' : ''].filter(Boolean).join(' ') || '0m';
+		};
+		const syncTripFields = (tripId) => {
+			document.getElementById('tripId').value = tripId;
+			document.getElementById('holdTripId').value = tripId;
+			document.getElementById('bookingTripId').value = tripId;
+			document.getElementById('waitTripId').value = tripId;
+		};
+		const renderTripSummary = (trip) => {
+			tripSummary.textContent = trip
+				? trip.route + '\nDeparture: ' + formatDateTime(trip.departureTime) + '\nDuration: ' + formatDuration(trip.durationMinutes || 0) + '\nTrip ID: ' + trip.id
+				: 'Select a trip to view booking options.';
+		};
+		const setActiveTrip = (tripId) => {
+			selectedTripId = tripId;
+			syncTripFields(tripId);
+			renderTripSummary(trips.find((item) => item.id === tripId));
+			document.querySelectorAll('.trip-card').forEach((card) => {
+				card.classList.toggle('active', card.dataset.tripId === tripId);
+			});
+		};
+		const renderTripOptions = () => {
+			tripGrid.innerHTML = '';
+			trips.forEach((trip) => {
+				const card = document.createElement('button');
+				card.type = 'button';
+				card.className = 'trip-card';
+				card.dataset.tripId = trip.id;
+				card.innerHTML = '<h3>' + trip.route + '</h3>' +
+					'<p>Route option for passengers choosing a departure slot.</p>' +
+					'<div class="trip-meta">' +
+						'<div><strong>Departure</strong><br /><span>' + formatDateTime(trip.departureTime) + '</span></div>' +
+						'<div><strong>Duration</strong><br /><span>' + formatDuration(trip.durationMinutes || 0) + '</span></div>' +
+						'<div><strong>Trip ID</strong><br /><span>' + trip.id + '</span></div>' +
+					'</div>';
+				card.addEventListener('click', async () => {
+					setActiveTrip(trip.id);
+					try {
+						await fetchSeats(trip.id);
+					} catch (error) {
+						setText('seatOutput', error.message);
+					}
+				});
+				tripGrid.appendChild(card);
+			});
+		};
 
 		function renderSeats(seats) {
 			seatMap.innerHTML = '';
@@ -790,6 +912,12 @@ app.get('/', (req, res) => {
 			setText('seatOutput', pretty(data));
 		}
 
+		renderTripOptions();
+		setActiveTrip(selectedTripId);
+		fetchSeats(selectedTripId).catch((error) => {
+			setText('seatOutput', error.message);
+		});
+
 		seatForm.addEventListener('submit', async (event) => {
 			event.preventDefault();
 			try {
@@ -800,10 +928,7 @@ app.get('/', (req, res) => {
 		});
 
 		document.getElementById('loadSample').addEventListener('click', async () => {
-			document.getElementById('tripId').value = sampleTripId;
-			document.getElementById('holdTripId').value = sampleTripId;
-			document.getElementById('bookingTripId').value = sampleTripId;
-			document.getElementById('waitTripId').value = sampleTripId;
+			setActiveTrip(sampleTripId);
 			try {
 				await fetchSeats(sampleTripId);
 			} catch (error) {
